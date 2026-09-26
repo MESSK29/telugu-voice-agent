@@ -85,13 +85,27 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         return
 
     try:
+        # Wait for Twilio's "start" event to get the actual stream_sid
+        stream_sid = ""
+        call_sid = ""
+        import json
+        
+        # Twilio typically sends 'connected' then 'start'
+        for _ in range(2):
+            msg = await websocket.receive_text()
+            data = json.loads(msg)
+            if data.get("event") == "start":
+                stream_sid = data["start"]["streamSid"]
+                call_sid = data["start"]["callSid"]
+                break
+
         transport = FastAPIWebsocketTransport(
             websocket=websocket,
             params=FastAPIWebsocketParams(
                 audio_in_sample_rate=8000,
                 audio_out_sample_rate=8000,
                 add_wav_header=False,
-                serializer=TwilioFrameSerializer(stream_sid=""),
+                serializer=TwilioFrameSerializer(stream_sid=stream_sid, call_sid=call_sid),
             )
         )
 

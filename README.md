@@ -54,3 +54,66 @@ A real-time Telugu voice AI agent providing instant conversation help and respon
 - Ensure the production environment provides `SARVAM_API_KEY`, `GROQ_API_KEY`, and sets `PORT`.
 - Deploy using a process manager or Docker container running `python bot.py`.
 - The application exposes a single Uvicorn ASGI server binding on `0.0.0.0`.
+
+## Outbound Calling
+You can use `make_call.py` to trigger an outbound call to a customer's phone using Twilio. The outbound call connects the customer to the *same* existing Telugu AI bot!
+
+**Architecture:**
+```text
+Python make_call.py
+↓
+Twilio REST API
+↓
+Customer phone
+↓
+Twilio
+↓
+Existing TwiML Bin
+↓
+Existing Pipecat Telugu Voice Agent
+↓
+Sarvam STT
+↓
+Groq
+↓
+Sarvam TTS
+↓
+Customer hears Telugu response
+```
+
+### Setup Outbound Calls
+1. Create/configure a Twilio account.
+2. Get your **Account SID** and **Auth Token**.
+3. Get a **Twilio phone number** capable of making calls.
+4. Configure your existing TwiML Bin to point to this bot's WebSocket endpoint.
+5. Put the TwiML Bin URL in `TWILIO_TWIML_URL` in your `.env` file.
+6. Set the destination phone number (`OUTBOUND_TO_NUMBER`) in your `.env` file using E.164 format (e.g. `+919876543210`).
+
+**If you are using a Twilio Trial Account:**
+- The destination number may need to be verified in Twilio.
+- The caller ID must be the exact Twilio number.
+- The destination number must use the correct international format.
+- The TwiML URL must be publicly accessible.
+- The Twilio credentials must be valid.
+
+### Run the Call
+```bash
+python make_call.py
+```
+*Note: A successful run will print something like `Calling... Call SID: CAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`*
+
+### Multiple Outbound Numbers (Optional Example)
+Later, the same Twilio call function can be used in a loop to call multiple numbers:
+```python
+from make_call import make_call
+import time
+
+numbers = [
+    "+919xxxxxxxxx",
+    "+919xxxxxxxxx"
+]
+
+for number in numbers:
+    make_call(number)
+    time.sleep(2) # Small delay between calls
+```

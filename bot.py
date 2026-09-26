@@ -45,22 +45,24 @@ class DebugProcessor(FrameProcessor):
 async def voice(request: Request):
     name = request.query_params.get("name", "")
     details = request.query_params.get("details", "")
+    phone = request.query_params.get("phone", "")
     host = request.headers.get("host")
     scheme = "wss" if request.url.scheme == "https" else "ws"
     
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="{scheme}://{host}/ws?name={name}&amp;details={details}">
+    <Stream url="{scheme}://{host}/ws?name={name}&amp;details={details}&amp;phone={phone}">
       <Parameter name="customer_name" value="{name}" />
       <Parameter name="customer_details" value="{details}" />
+      <Parameter name="customer_phone" value="{phone}" />
     </Stream>
   </Connect>
 </Response>"""
     return Response(content=twiml, media_type="application/xml")
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str = ""):
+async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str = "", phone: str = ""):
     await websocket.accept()
 
     sarvam_api_key = os.getenv("SARVAM_API_KEY")
@@ -156,7 +158,7 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
             
             payload = {
                 "timestamp": datetime.now().isoformat(),
-                "caller_number": "Outbound/Inbound Call", 
+                "caller_number": phone or "Unknown", 
                 "summary": summary
             }
             

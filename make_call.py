@@ -50,7 +50,7 @@ def make_call(to_number: str = None):
             
             # Twilio will hit this route to get the custom TwiML
             import urllib.parse
-            call_url = f"{base_url}/voice?name={urllib.parse.quote(c['name'])}&details={urllib.parse.quote(c['details'])}"
+            call_url = f"{base_url}/voice?name={urllib.parse.quote(c['name'])}&details={urllib.parse.quote(c['details'])}&phone={urllib.parse.quote(c['phone'])}"
             
             call = client.calls.create(
                 to=c['phone'],

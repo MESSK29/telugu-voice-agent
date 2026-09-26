@@ -105,7 +105,11 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
                 audio_in_sample_rate=8000,
                 audio_out_sample_rate=8000,
                 add_wav_header=False,
-                serializer=TwilioFrameSerializer(stream_sid=stream_sid, call_sid=call_sid),
+                serializer=TwilioFrameSerializer(
+                    stream_sid=stream_sid, 
+                    call_sid=call_sid,
+                    params=TwilioFrameSerializer.InputParams(auto_hang_up=False)
+                ),
             )
         )
 

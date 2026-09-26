@@ -32,14 +32,24 @@ async def health_check():
         "service": "Telugu Voice Agent"
     }
 
-class DebugProcessor(FrameProcessor):
+class DebugInputProcessor(FrameProcessor):
     async def process_frame(self, frame, direction):
         if isinstance(frame, TranscriptionFrame):
-            print(f"\\n[USER] ({frame.language}): {frame.text}")
-        elif isinstance(frame, TextFrame):
-            print(frame.text, end="", flush=True)
+            print(f"\n[INFO - STT OUTPUT] User said: {frame.text}")
+        await self.push_frame(frame, direction)
+
+class DebugOutputProcessor(FrameProcessor):
+    async def process_frame(self, frame, direction):
+        if isinstance(frame, TextFrame):
+            print(f"\n[INFO - LLM OUTPUT] Agent says: {frame.text}")
+        elif type(frame).__name__ == "TTSAudioRawFrame":
+            # TTS generates raw audio chunks, just log the first chunk of a response
+            if getattr(self, "_tts_started", False) is False:
+                print("\n[INFO - TTS OUTPUT] TTS started generating audio...")
+                self._tts_started = True
         elif type(frame).__name__ == "LLMFullResponseEndFrame":
-            print("\\n[AGENT DONE]")
+            print("\n[INFO] LLM finished response.")
+            self._tts_started = False
         await self.push_frame(frame, direction)
 
 @app.post("/voice")
@@ -97,6 +107,7 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
             if data.get("event") == "start":
                 stream_sid = data["start"]["streamSid"]
                 call_sid = data["start"]["callSid"]
+                print(f"\n[INFO - TWILIO] Received start event. streamSid={stream_sid}, callSid={call_sid}")
                 break
 
         transport = FastAPIWebsocketTransport(
@@ -149,14 +160,16 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         )
         context_aggregators = LLMContextAggregatorPair(context=context)
 
-        debug_processor = DebugProcessor()
+        debug_input = DebugInputProcessor()
+        debug_output = DebugOutputProcessor()
 
         pipeline = Pipeline([
             transport.input(),
             stt,
+            debug_input,
             context_aggregators.user(),
             llm,
-            debug_processor,
+            debug_output,
             tts,
             context_aggregators.assistant(),
             transport.output()
@@ -204,7 +217,9 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
                 print(f"Failed to send webhook: {e}")
 
     except Exception as e:
-        print(f"Runtime error: {e}")
+        print(f"\n[FATAL ERROR] Runtime error in pipeline: {e}")
+        import traceback
+        traceback.print_exc()
         try:
             await websocket.close(code=1011)
         except:

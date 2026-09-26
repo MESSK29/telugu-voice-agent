@@ -49,13 +49,23 @@ async def voice(request: Request):
     host = request.headers.get("host")
     scheme = "wss" if request.url.scheme == "https" else "ws"
     
+    import urllib.parse
+    import html
+    enc_name = urllib.parse.quote(name)
+    enc_details = urllib.parse.quote(details)
+    enc_phone = urllib.parse.quote(phone)
+    
+    safe_name = html.escape(name)
+    safe_details = html.escape(details)
+    safe_phone = html.escape(phone)
+    
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="{scheme}://{host}/ws?name={name}&amp;details={details}&amp;phone={phone}">
-      <Parameter name="customer_name" value="{name}" />
-      <Parameter name="customer_details" value="{details}" />
-      <Parameter name="customer_phone" value="{phone}" />
+    <Stream url="{scheme}://{host}/ws?name={enc_name}&amp;details={enc_details}&amp;phone={enc_phone}">
+      <Parameter name="customer_name" value="{safe_name}" />
+      <Parameter name="customer_details" value="{safe_details}" />
+      <Parameter name="customer_phone" value="{safe_phone}" />
     </Stream>
   </Connect>
 </Response>"""

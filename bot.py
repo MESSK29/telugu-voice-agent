@@ -10,6 +10,7 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
     FastAPIWebsocketParams,
 )
+from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.sarvam.stt import SarvamSTTService
 from pipecat.services.sarvam.tts import SarvamTTSService
 from pipecat.services.groq.llm import GroqLLMService
@@ -87,7 +88,10 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         transport = FastAPIWebsocketTransport(
             websocket=websocket,
             params=FastAPIWebsocketParams(
-                add_wav_header=False
+                audio_in_sample_rate=8000,
+                audio_out_sample_rate=8000,
+                add_wav_header=False,
+                serializer=TwilioFrameSerializer(stream_sid=""),
             )
         )
 

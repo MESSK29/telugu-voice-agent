@@ -163,6 +163,8 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
             print("Client connected!")
+            # Kickstart the conversation by pretending the user said "Hello" so the agent speaks first
+            await worker.task.queue.put(TranscriptionFrame(text="Hello", user_id="user", timestamp="0"))
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport, client):

@@ -1,0 +1,5 @@
+pipecat-ai[groq,sarvam,websocket]
+fastapi
+uvicorn
+python-dotenv
+websockets

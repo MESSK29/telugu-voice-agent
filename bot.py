@@ -33,23 +33,38 @@ async def health_check():
     }
 
 class DebugInputProcessor(FrameProcessor):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._first_audio_in = False
+
     async def process_frame(self, frame, direction):
-        if isinstance(frame, TranscriptionFrame):
+        if type(frame).__name__ == "InputAudioRawFrame" and not self._first_audio_in:
+            print("\n[INFO - TRANSPORT IN] Received FIRST raw audio frame from Twilio!")
+            self._first_audio_in = True
+        elif isinstance(frame, TranscriptionFrame):
             print(f"\n[INFO - STT OUTPUT] User said: {frame.text}")
         await self.push_frame(frame, direction)
 
 class DebugOutputProcessor(FrameProcessor):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._tts_started = False
+        self._first_audio_out = False
+
     async def process_frame(self, frame, direction):
         if isinstance(frame, TextFrame):
             print(f"\n[INFO - LLM OUTPUT] Agent says: {frame.text}")
         elif type(frame).__name__ == "TTSAudioRawFrame":
-            # TTS generates raw audio chunks, just log the first chunk of a response
-            if getattr(self, "_tts_started", False) is False:
+            if not self._tts_started:
                 print("\n[INFO - TTS OUTPUT] TTS started generating audio...")
                 self._tts_started = True
+        elif type(frame).__name__ == "OutputAudioRawFrame" and not self._first_audio_out:
+            print("\n[INFO - TRANSPORT OUT] Sending FIRST raw audio frame back to Twilio!")
+            self._first_audio_out = True
         elif type(frame).__name__ == "LLMFullResponseEndFrame":
             print("\n[INFO] LLM finished response.")
             self._tts_started = False
+            self._first_audio_out = False
         await self.push_frame(frame, direction)
 
 @app.post("/voice")

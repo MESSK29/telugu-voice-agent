@@ -13,7 +13,7 @@ def make_call(to_number: str = None):
         "TWILIO_AUTH_TOKEN",
         "TWILIO_PHONE_NUMBER",
         "OUTBOUND_TO_NUMBER",
-        "TWILIO_TWIML_URL"
+        "BASE_URL"
     ]
     
     missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -28,7 +28,14 @@ def make_call(to_number: str = None):
     
     # Use the passed argument if available, else fallback to the .env var
     target_number = to_number or os.getenv("OUTBOUND_TO_NUMBER")
-    twiml_url = os.getenv("TWILIO_TWIML_URL")
+    base_url = os.getenv("BASE_URL").rstrip('/')
+    
+    # Example simulated DB context for multiple calls
+    customers = []
+    numbers_to_call = [n.strip() for n in target_number.split(',')]
+    for num in numbers_to_call:
+        if num:
+            customers.append({"phone": num, "name": "Customer", "details": "Wants to know about new stock"})
     
     # Initialize Twilio client
     try:
@@ -37,21 +44,22 @@ def make_call(to_number: str = None):
         print(f"Error initializing Twilio client: {e}")
         sys.exit(1)
         
-    # If target_number contains commas, treat it as a list
-    numbers_to_call = [n.strip() for n in target_number.split(',')]
-    
     try:
-        for number in numbers_to_call:
-            if not number: continue
-            print(f"Initiating call to {number}...")
+        for c in customers:
+            print(f"Initiating call to {c['name']} ({c['phone']})...")
+            
+            # Twilio will hit this route to get the custom TwiML
+            import urllib.parse
+            call_url = f"{base_url}/voice?name={urllib.parse.quote(c['name'])}&details={urllib.parse.quote(c['details'])}"
+            
             call = client.calls.create(
-                to=number,
+                to=c['phone'],
                 from_=from_number,
-                url=twiml_url
+                url=call_url
             )
             print(f"Success! Calling... Call SID: {call.sid}")
             
-            if len(numbers_to_call) > 1:
+            if len(customers) > 1:
                 import time
                 print("Waiting 10 seconds before next call...")
                 time.sleep(10)

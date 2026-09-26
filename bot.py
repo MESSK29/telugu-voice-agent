@@ -1,4 +1,5 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request
+from fastapi.responses import Response
 import uvicorn
 import aiohttp
 from datetime import datetime
@@ -40,8 +41,26 @@ class DebugProcessor(FrameProcessor):
             print("\\n[AGENT DONE]")
         await self.push_frame(frame, direction)
 
+@app.post("/voice")
+async def voice(request: Request):
+    name = request.query_params.get("name", "")
+    details = request.query_params.get("details", "")
+    host = request.headers.get("host")
+    scheme = "wss" if request.url.scheme == "https" else "ws"
+    
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="{scheme}://{host}/ws?name={name}&amp;details={details}">
+      <Parameter name="customer_name" value="{name}" />
+      <Parameter name="customer_details" value="{details}" />
+    </Stream>
+  </Connect>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str = ""):
     await websocket.accept()
 
     sarvam_api_key = os.getenv("SARVAM_API_KEY")
@@ -75,11 +94,19 @@ async def websocket_endpoint(websocket: WebSocket):
             settings=GroqLLMService.Settings(model="llama-3.1-8b-instant")
         )
 
-        system_prompt = (
-            "Nuvvu oka sahayaka voice agent vi. Telugu lo maatlaadu. "
-            "Caller adigina prashnalaku chinnaga, spashtanga mariyu sahajanga samaadhaanam ivvu. "
-            "Phone conversation kabatti responses short ga unchandi."
-        )
+        if name:
+            system_prompt = (
+                f"Nuvvu oka sahayaka voice agent vi. Telugu lo maatlaadu. "
+                f"You are calling {name}. Details: {details}. "
+                "Caller adigina prashnalaku chinnaga, spashtanga mariyu sahajanga samaadhaanam ivvu. "
+                "Phone conversation kabatti responses short ga unchandi."
+            )
+        else:
+            system_prompt = (
+                "Nuvvu oka sahayaka voice agent vi. Telugu lo maatlaadu. "
+                "Caller adigina prashnalaku chinnaga, spashtanga mariyu sahajanga samaadhaanam ivvu. "
+                "Phone conversation kabatti responses short ga unchandi."
+            )
 
         context = LLMContext(
             messages=[

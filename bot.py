@@ -1,5 +1,7 @@
 from fastapi import FastAPI, WebSocket
 import uvicorn
+import aiohttp
+from datetime import datetime
 from dotenv import load_dotenv
 import os
 
@@ -111,6 +113,32 @@ async def websocket_endpoint(websocket: WebSocket):
             await worker.cancel()
 
         await worker.run()
+
+        # Call ended, send the data to Google Sheets via Webhook/n8n
+        webhook_url = os.getenv("WEBHOOK_URL")
+        if webhook_url:
+            print("Sending call log to webhook...")
+            
+            # Extract conversation context
+            conversation = []
+            for msg in context.messages:
+                if msg.get("role") in ["user", "assistant"]:
+                    conversation.append(f"{msg['role'].upper()}: {msg.get('content')}")
+            
+            summary = "\n".join(conversation)
+            
+            payload = {
+                "timestamp": datetime.now().isoformat(),
+                "caller_number": "Outbound/Inbound Call", 
+                "summary": summary
+            }
+            
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(webhook_url, json=payload) as response:
+                        print(f"Webhook response status: {response.status}")
+            except Exception as e:
+                print(f"Failed to send webhook: {e}")
 
     except Exception as e:
         print(f"Runtime error: {e}")

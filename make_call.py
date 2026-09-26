@@ -37,15 +37,25 @@ def make_call(to_number: str = None):
         print(f"Error initializing Twilio client: {e}")
         sys.exit(1)
         
-    print(f"Initiating call to {target_number}...")
+    # If target_number contains commas, treat it as a list
+    numbers_to_call = [n.strip() for n in target_number.split(',')]
     
     try:
-        call = client.calls.create(
-            to=target_number,
-            from_=from_number,
-            url=twiml_url
-        )
-        print(f"Success! Calling... Call SID: {call.sid}")
+        for number in numbers_to_call:
+            if not number: continue
+            print(f"Initiating call to {number}...")
+            call = client.calls.create(
+                to=number,
+                from_=from_number,
+                url=twiml_url
+            )
+            print(f"Success! Calling... Call SID: {call.sid}")
+            
+            if len(numbers_to_call) > 1:
+                import time
+                print("Waiting 10 seconds before next call...")
+                time.sleep(10)
+                
     except Exception as e:
         print(f"Failed to place call via Twilio API: {e}")
         sys.exit(1)

@@ -72,14 +72,17 @@ async def on_startup():
 
 
 @app.get("/")
+@app.head("/")
 async def root():
     return {"status": "ok", "service": "Telugu Voice Agent"}
 
 
 @app.get("/health")
+@app.head("/health")
 async def health():
     """
     Readiness probe polled by bowls-n-jars before placing any batch calls.
+    Also used by Render's health check (both GET and HEAD).
     HTTP 200 + {ready: true}  => server fully up, safe to call.
     HTTP 503 + {ready: false} => still initialising (cold start).
     """
@@ -92,6 +95,7 @@ async def health():
 
 
 @app.get("/wake-up")
+@app.head("/wake-up")
 async def wake_up():
     """Alias for /health — kept for backward compat with older bowls-n-jars calls."""
     return await health()

@@ -295,9 +295,14 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
             logger.info("[WS] Pipecat client connected — kickstarting with Telugu greeting.")
-            await worker.task.queue.put(
-                TranscriptionFrame(text="Hello", user_id="user", timestamp="0")
-            )
+            # pipecat 1.12: use worker.queue_frame() directly (worker.task does not exist)
+            try:
+                await worker.queue_frame(
+                    TranscriptionFrame(text="Hello", user_id="user", timestamp="0")
+                )
+                logger.info("[WS] Kickstart TranscriptionFrame queued successfully.")
+            except Exception as kick_err:
+                logger.error(f"[WS] Failed to queue kickstart frame: {kick_err}")
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport, client):

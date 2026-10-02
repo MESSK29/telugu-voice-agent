@@ -28,6 +28,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker, PipelineParams
+from pipecat.workers.runner import WorkerRunner
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.frames.frames import TranscriptionFrame, TextFrame
 
@@ -295,6 +296,8 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         )
 
         worker = PipelineWorker(pipeline, params=PipelineParams(allow_interruptions=True))
+        runner = WorkerRunner()
+        await runner.add_workers(worker)
 
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
@@ -311,11 +314,11 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport, client):
             logger.info("[WS] Pipecat client disconnected.")
-            await worker.cancel()
+            await runner.cancel()
 
-        logger.info("[WS] Pipeline built. Starting PipelineWorker...")
-        await worker.run()
-        logger.info("[WS] PipelineWorker finished normally.")
+        logger.info("[WS] Pipeline built. Starting PipelineWorker via WorkerRunner...")
+        await runner.run()
+        logger.info("[WS] WorkerRunner finished normally.")
 
         # ------------------------------------------------------------------
         # Post-call: send conversation summary to webhook

@@ -30,7 +30,12 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker, PipelineParams
 from pipecat.workers.runner import WorkerRunner
 from pipecat.processors.frame_processor import FrameProcessor
-from pipecat.frames.frames import TranscriptionFrame, TextFrame
+from pipecat.frames.frames import (
+    TranscriptionFrame,
+    TextFrame,
+    LLMMessagesAppendFrame,
+    LLMRunFrame,
+)
 
 load_dotenv()
 
@@ -103,39 +108,60 @@ async def wake_up():
 
 
 class DebugInputProcessor(FrameProcessor):
+    """Logs every frame entering the STT stage (between transport.input() and STT)."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._first_audio_in = False
 
     async def process_frame(self, frame, direction):
-        if type(frame).__name__ == "InputAudioRawFrame" and not self._first_audio_in:
-            print("\n[INFO - TRANSPORT IN] Received FIRST raw audio frame from Twilio!")
-            self._first_audio_in = True
+        frame_name = type(frame).__name__
+        if frame_name == "InputAudioRawFrame":
+            if not self._first_audio_in:
+                logger.info("[PIPELINE-IN] First InputAudioRawFrame received from Twilio.")
+                self._first_audio_in = True
         elif isinstance(frame, TranscriptionFrame):
-            print(f"\n[INFO - STT OUTPUT] User said: {frame.text}")
+            logger.info(f"[PIPELINE-IN] TranscriptionFrame: text={frame.text!r} finalized={frame.finalized}")
+        elif isinstance(frame, LLMMessagesAppendFrame):
+            logger.info(f"[PIPELINE-IN] LLMMessagesAppendFrame: msgs={frame.messages!r} run_llm={frame.run_llm}")
+        elif frame_name not in ("HeartbeatFrame", "StartFrame", "EndFrame"):
+            logger.info(f"[PIPELINE-IN] Frame: {frame_name}")
         await self.push_frame(frame, direction)
 
+
 class DebugOutputProcessor(FrameProcessor):
+    """Logs every frame leaving the LLM (between LLM and TTS)."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._tts_started = False
         self._first_audio_out = False
 
     async def process_frame(self, frame, direction):
+        frame_name = type(frame).__name__
         if isinstance(frame, TextFrame):
-            print(f"\n[INFO - LLM OUTPUT] Agent says: {frame.text}")
-        elif type(frame).__name__ == "TTSAudioRawFrame":
+            logger.info(f"[PIPELINE-OUT] TextFrame (LLM output): {frame.text!r}")
+        elif frame_name == "TTSAudioRawFrame":
             if not self._tts_started:
-                print("\n[INFO - TTS OUTPUT] TTS started generating audio...")
+                logger.info("[PIPELINE-OUT] TTS started generating audio.")
                 self._tts_started = True
-        elif type(frame).__name__ == "OutputAudioRawFrame" and not self._first_audio_out:
-            print("\n[INFO - TRANSPORT OUT] Sending FIRST raw audio frame back to Twilio!")
-            self._first_audio_out = True
-        elif type(frame).__name__ == "LLMFullResponseEndFrame":
-            print("\n[INFO] LLM finished response.")
+        elif frame_name == "TTSStartedFrame":
+            logger.info("[PIPELINE-OUT] TTSStartedFrame.")
+        elif frame_name == "TTSStoppedFrame":
+            logger.info("[PIPELINE-OUT] TTSStoppedFrame.")
+            self._tts_started = False
+        elif frame_name == "LLMFullResponseStartFrame":
+            logger.info("[PIPELINE-OUT] LLM response START.")
+        elif frame_name == "LLMFullResponseEndFrame":
+            logger.info("[PIPELINE-OUT] LLM response END.")
             self._tts_started = False
             self._first_audio_out = False
+        elif frame_name == "OutputAudioRawFrame":
+            if not self._first_audio_out:
+                logger.info("[PIPELINE-OUT] First OutputAudioRawFrame sent to Twilio.")
+                self._first_audio_out = True
+        elif frame_name not in ("HeartbeatFrame", "StartFrame", "EndFrame"):
+            logger.info(f"[PIPELINE-OUT] Frame: {frame_name}")
         await self.push_frame(frame, direction)
+
 
 @app.post("/voice")
 async def voice(request: Request):
@@ -251,9 +277,15 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
 
         stt = SarvamSTTService(api_key=sarvam_api_key, language="te-IN")
 
+        # Issue 1 fix: language must be 'te-IN' (not the default 'en-IN').
+        # 'meera' is a confirmed bulbul:v3 Telugu voice.
         tts = SarvamTTSService(
             api_key=sarvam_api_key,
-            settings=SarvamTTSService.Settings(voice="priya"),
+            settings=SarvamTTSService.Settings(
+                language="te-IN",
+                voice="meera",
+                model="bulbul:v3",
+            ),
         )
 
         llm = GroqLLMService(
@@ -302,12 +334,18 @@ async def websocket_endpoint(websocket: WebSocket, name: str = "", details: str 
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
             logger.info("[WS] Pipecat client connected — kickstarting with Telugu greeting.")
-            # pipecat 1.12: use worker.queue_frame() directly (worker.task does not exist)
+            # Issue 2 fix: TranscriptionFrame is only aggregated by LLMUserAggregator —
+            # the LLM never runs until a turn-stop signal fires (which never comes for
+            # a bot-initiated greeting). Instead, use LLMMessagesAppendFrame(run_llm=True)
+            # which appends a user turn message AND immediately fires the LLM.
             try:
+                greeting_msg = [
+                    {"role": "user", "content": "Hello, please greet me and tell me why you are calling."}
+                ]
                 await worker.queue_frame(
-                    TranscriptionFrame(text="Hello", user_id="user", timestamp="0")
+                    LLMMessagesAppendFrame(messages=greeting_msg, run_llm=True)
                 )
-                logger.info("[WS] Kickstart TranscriptionFrame queued successfully.")
+                logger.info("[WS] Kickstart LLMMessagesAppendFrame(run_llm=True) queued.")
             except Exception as kick_err:
                 logger.error(f"[WS] Failed to queue kickstart frame: {kick_err}")
 
